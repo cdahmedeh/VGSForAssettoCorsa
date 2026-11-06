@@ -87,12 +87,16 @@ TUNE.GRIP_HZ          = 6     -- smoothing of each axle's ndSlip
 TUNE.GRIP_MIN_SPEED   = 4     -- m/s: below this the limits aren't judged (fading in over 3 m/s)
 TUNE.US_WARN_SHARE    = 0.35  -- must match UNDER_WARN in render.lua
 TUNE.US_MIN_YAW       = 0.10
-TUNE.DRIFT_STEER_OK   = 0.09
-TUNE.DRIFT_STEER_OFF  = 0.26
-TUNE.DRIFT_GROW_OK    = 0.35
-TUNE.DRIFT_GROW_OFF   = 1.0
-TUNE.DRIFT_MAX_ANGLE  = 1.57
-TUNE.DRIFT_RATE_HZ    = 4
+-- Drift: the rule from Damgam's Drift Scoring app. A drift is the rear tyres' slip angle (AC's own,
+-- the larger of the two) over DRIFT_MIN_ANGLE at more than DRIFT_MIN_SPEED, up to DRIFT_MAX_ANGLE
+-- (past that it's a spin). Going backwards, the angle is measured from the other end (180 - angle).
+TUNE.DRIFT_MIN_ANGLE  = 10    -- degrees
+TUNE.DRIFT_MAX_ANGLE  = 120   -- degrees
+TUNE.DRIFT_MIN_SPEED  = 20    -- km/h
+TUNE.DRIFT_HOLD       = 0.5   -- s a drift stays on after the angle drops (through a transition)
+TUNE.DRIFT_RATE_HZ    = 4     -- smoothing of the slide's growth (for the powerslide's control)
+TUNE.PS_GROW_OK       = 0.35  -- rad/s a powerslide can grow and still count as controlled ...
+TUNE.PS_GROW_OFF      = 1.0   -- ... and from which it doesn't
 TUNE.PS_REAR_START    = 0.10
 TUNE.PS_REAR_FULL     = 0.17
 TUNE.PS_FRONT_START   = 0.035
@@ -185,7 +189,8 @@ local function resetState()
           yawRate = 0, yawFast = 0, yawSign = 1, yawCheck = 0, lastFwd = nil, lastLeft = nil,
           travel = 0, rearTravel = 0, speed = 0, lastPos = nil }
   est = { rn = 0, rd = 0, ratio = nil, lock = TUNE.LOCK_DEFAULT, balance = 0, frontSteer = nil, rearSteer = 0,
-          slipF = nil, slipR = nil, drift = 0, slideRate = 0, prevSlide = nil, state = 0, cand = 0, candT = 0,
+          slipF = nil, slipR = nil, slideRate = 0, prevSlide = nil, state = 0, cand = 0, candT = 0,
+          drifting = false, driftAngle = 0, driftOffT = 0,
           ps = 0, psCtl = 0, psOn = false, psCtlOn = false, rs = 0, drvF = false, drvR = false }
   mark = { init = false, y = 0, d = 0, df = 0, ds = 0, s = 0 }
   gm = { pF = 0, pR = 0 }
@@ -433,8 +438,9 @@ end
 
 -- ===== Balance state (as the BeamNG version, with AC's ndSlip as each axle's proximity) =====
 -- 0 neutral, 1 front near its limit, 2 understeer, 3 rear near its limit, 4 both at their limit,
--- 5 oversteer (a controlled drift with dc), 6 a controlled powerslide
+-- 5 oversteer (a drift with dc), 6 a controlled powerslide
 local function balanceStateOf(prev, bal, measured, rearSliding)
+  if est.drifting then return 5 end
   if not measured then return 0 end
   if est.psOn then return est.psCtlOn and 6 or 5 end
   if bal >= (prev == 5 and 0.12 or 0.15) then return 5 end
@@ -540,6 +546,7 @@ function T.update(car, dt, opts)
   out = o
   local fSum, fN, rSum, rN = 0, 0, 0, 0
   local ndF, ldF, ndR, ldR = 0, 0, 0, 0
+  local rearSA, rearSAany = -1, 0   -- largest rear slip angle (degrees): wheels on the ground, any wheel
   for i = 0, 3 do
     local w, L = car.wheels[i], lay.wheels[i]
     local S = ws[i]
@@ -604,6 +611,10 @@ function T.update(car, dt, opts)
     if steer > pi / 2 then steer = steer - pi elseif steer < -pi / 2 then steer = steer + pi end
     if i < 2 then fSum, fN = fSum + steer, fN + 1 else rSum, rN = rSum + steer, rN + 1 end
 
+    if i >= 2 then
+      rearSAany = max(rearSAany, abs(saDeg))
+      if not unloaded then rearSA = max(rearSA, abs(saDeg)) end
+    end
     -- each axle's ndSlip, weighted by load
     if not unloaded then
       if i < 2 then ndF, ldF = ndF + nd * load, ldF + load else ndR, ldR = ndR + nd * load, ldR + load end
@@ -677,25 +688,38 @@ function T.update(car, dt, opts)
     target = -(TUNE.US_WARN_SHARE * near + (1 - TUNE.US_WARN_SHARE) * past) * lead * yawUnder * (1 - rs)
   end
   est.balance = est.balance + (target - est.balance) * clamp(TUNE.TRAVEL_SMOOTH_HZ * dt, 0, 1)
+
+  -- drifting? (Drift Scoring's rule; see TUNE.DRIFT_*)
+  do
+    local angle = (rearSA >= 0) and rearSA or rearSAany
+    if vF <= 0 and speed * 3.6 > 1 then angle = 180 - angle end   -- going backwards
+    est.driftAngle = angle
+    local fastEnough = speed * 3.6 > TUNE.DRIFT_MIN_SPEED
+    local spun = angle > TUNE.DRIFT_MAX_ANGLE
+    if fastEnough and not spun and angle > TUNE.DRIFT_MIN_ANGLE then
+      est.drifting, est.driftOffT = true, 0
+    elseif est.drifting then
+      -- through a transition the angle passes zero: hold on briefly, but not through a spin or a stop
+      est.driftOffT = est.driftOffT + dt
+      if spun or not fastEnough or est.driftOffT >= TUNE.DRIFT_HOLD then est.drifting = false end
+    end
+  end
+
   local cand = balanceStateOf(est.state, est.balance, speed > TUNE.TRAVEL_FADE_LO, rs > 0.05)
   local warn = cand == 1 or cand == 3 or cand == 4
   if cand ~= est.cand then est.cand, est.candT = cand, 0 else est.candT = est.candT + dt end
   if not warn or est.state == 2 or est.state == 5 or est.candT >= TUNE.WARN_HOLD or (est.state ~= 0 and warn) then est.state = cand end
 
-  -- how controlled a slide is: 1 = a controlled drift
-  local control, holdingAll = 0, 0
+  -- a powerslide counts as controlled while the slide isn't growing
+  local holdingAll = 0
   do
     local slide = wrapAngle(est.rearSteer - kin.rearTravel)
     local rate = est.prevSlide and wrapAngle(slide - est.prevSlide) / dt or 0
     est.prevSlide = slide
     est.slideRate = est.slideRate + (rate - est.slideRate) * lpAlpha(TUNE.DRIFT_RATE_HZ, dt)
     local growing = max(0, est.slideRate * (slide >= 0 and 1 or -1))
-    local steerOk = 1 - smoothstep((abs(slipF) - TUNE.DRIFT_STEER_OK) / (TUNE.DRIFT_STEER_OFF - TUNE.DRIFT_STEER_OK))
-    local holding = 1 - smoothstep((growing - TUNE.DRIFT_GROW_OK) / (TUNE.DRIFT_GROW_OFF - TUNE.DRIFT_GROW_OK))
-    control = (abs(slide) > TUNE.DRIFT_MAX_ANGLE) and 0 or steerOk * holding
-    holdingAll = (abs(slide) > TUNE.DRIFT_MAX_ANGLE) and 0 or holding
+    holdingAll = (abs(slide) > pi / 2) and 0 or (1 - smoothstep((growing - TUNE.PS_GROW_OK) / (TUNE.PS_GROW_OFF - TUNE.PS_GROW_OK)))
   end
-  est.drift = est.drift + (control - est.drift) * clamp(TUNE.TRAVEL_SMOOTH_HZ * dt, 0, 1)
   -- an all-wheel-drive powerslide, and how controlled it is
   local ps = 0
   if est.drvF and est.drvR then
@@ -740,7 +764,7 @@ function T.update(car, dt, opts)
     inp.ta = clamp((speed - TUNE.TRAVEL_FADE_LO) / (TUNE.TRAVEL_FADE_HI - TUNE.TRAVEL_FADE_LO), 0, 1)
     inp.bal = est.balance
     inp.bs = est.state
-    inp.dc = (est.balance > 0.01) and est.drift or nil
+    inp.dc = est.drifting and 1 or 0
   else
     mark.init = false
   end
@@ -764,6 +788,7 @@ function T.update(car, dt, opts)
     o.vd = o.vd or {}
     o.vd.af, o.vd.ar = slipF * turn, slipR * turn
     o.vd.sl = (est.state == 6) and abs(slipR) or nil
+    o.vd.da = est.drifting and est.driftAngle or nil   -- the drift angle, in degrees
   else
     o.vd = nil
   end
@@ -776,7 +801,7 @@ function T.diag()
   return {
     layout = lay.drive.layout, engine = lay.drive.engine, cg = lay.drive.cg, wb = lay.wb,
     pF = gm.pF, pR = gm.pR, state = est.state, balance = est.balance, lock = est.lock, ratio = est.ratio,
-    slipF = est.slipF, slipR = est.slipR, yaw = kin.yawRate, steerSign = cal.steerSign, srSign = cal.srSign,
+    slipF = est.slipF, slipR = est.slipR, drifting = est.drifting, driftAngle = est.driftAngle, yaw = kin.yawRate, steerSign = cal.steerSign, srSign = cal.srSign,
     yawSign = kin.yawSign,
   }
 end

@@ -10,7 +10,7 @@
 --                bottom-right, clutch and handbrake along the outer edge
 --   Wedge      : the direction marker (how much the car is actually turning), coloured by the
 --                balance: yellow warnings, orange-red understeer, pink-magenta oversteer,
---                aquamarine a controlled drift or powerslide
+--                aquamarine a drift, or a controlled all-wheel-drive powerslide
 --   Yellow dot : the G-force, with a fading trail
 -- Numbers mode adds grip and load by every corner, and the balance in words and degrees.
 -- All drawing goes through D (below), so the renderer can run outside the game too.
@@ -687,9 +687,9 @@ end
 local function balanceFont(rPx) return clamp(rPx * 0.058, 8.5, 11) end
 local function degreeFont(rPx) return balanceFont(rPx) * 1.15 end
 local STATE_WORD = { near = 'Front near limit', rnear = 'Rear near limit', limit = 'At the limit', under = 'Understeer',
-                     over = 'Oversteer', drift = 'Controlled drift', pslide = 'Controlled powerslide' }
+                     over = 'Oversteer', drift = 'Drift', pslide = 'Controlled powerslide' }
 local SHORT_WORD = { ['Understeer'] = 'Under', ['Front near limit'] = 'Front near', ['Rear near limit'] = 'Rear near',
-                     ['At the limit'] = 'At limit', ['Oversteer'] = 'Over', ['Controlled drift'] = 'Drift', ['Controlled powerslide'] = 'Powerslide' }
+                     ['At the limit'] = 'At limit', ['Oversteer'] = 'Over', ['Controlled powerslide'] = 'Powerslide' }
 local function chordDrop(inner, width)
   local half = width / 2 + 4
   if half >= inner then return inner end
@@ -710,6 +710,7 @@ local function drawBalance(body, cx, cy, inner, rPx, compact, mk)
   local diff
   if vd.af and vd.ar then diff = readGet('bal', (vd.af - vd.ar) * 180 / pi) end
   if st == 'pslide' and vd.sl then diff = readGet('sl', vd.sl * 180 / pi) end
+  if st == 'drift' and vd.da then diff = readGet('da', vd.da) end
   local word = STATE_WORD[st]
   if compact then word = SHORT_WORD[word] or word end
   local c = rgbm(mk.rgb[1] / 255, mk.rgb[2] / 255, mk.rgb[3] / 255, 1)
@@ -832,6 +833,7 @@ function R.draw(body, W, H, dtMs, opts)
     local vd = body.vd
     if vd and vd.af and vd.ar then readAdd('bal', (vd.af - vd.ar) * 180 / pi) end
     if vd and vd.sl then readAdd('sl', vd.sl * 180 / pi) end
+    if vd and vd.da then readAdd('da', vd.da) end
     readTick(MS.now)
     local circle = { cx = ccx, cy = ccy, r = inner, compact = compact }
     drawCornerReadouts(body, wheelPoint, dims, circle, opts.units)

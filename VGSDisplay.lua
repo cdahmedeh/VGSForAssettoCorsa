@@ -65,7 +65,7 @@ function script.windowMain(dt)
 end
 
 local function fmtNum(v, d) if type(v) ~= 'number' then return '–' end return string.format('%.' .. (d or 2) .. 'f', v) end
-local STATE_NAME = { [0] = 'neutral', 'front near limit', 'understeer', 'rear near limit', 'at the limit', 'oversteer', 'controlled powerslide' }
+local STATE_NAME = { [0] = 'neutral', 'front near limit', 'understeer', 'rear near limit', 'at the limit', 'oversteer / drift', 'controlled powerslide' }
 
 function script.windowSettings(dt)
   ui.header('Display')
@@ -87,6 +87,7 @@ function script.windowSettings(dt)
     ui.text(string.format('Near limit (ndSlip): front %s, rear %s', fmtNum(d.pF), fmtNum(d.pR)))
     ui.text(string.format('Slip angle: front %s deg, rear %s deg', fmtNum(d.slipF and math.deg(d.slipF), 1), fmtNum(d.slipR and math.deg(d.slipR), 1)))
     ui.text(string.format('Yaw rate %s rad/s, state: %s', fmtNum(d.yaw), STATE_NAME[d.state] or '?'))
+    ui.text(string.format('Drift angle (rear tyres) %s deg: %s', fmtNum(d.driftAngle, 0), d.drifting and 'drifting' or 'not drifting'))
     ui.text(string.format('Signs learnt: steering %d, slip ratio %d, yaw %d', d.steerSign, d.srSign, d.yawSign))
   else
     ui.text('No car yet.')

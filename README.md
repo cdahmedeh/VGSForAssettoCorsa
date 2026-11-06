@@ -4,7 +4,7 @@ A live grip display for Assetto Corsa, ported from the BeamNG.drive version (2.5
 
 It's a Custom Shaders Patch (CSP) Lua app. The picture, colours and rules are the BeamNG version's. Where AC reports things differently, the app reads what AC has. [What's different from the BeamNG version](#whats-different-from-the-beamng-version) lists every change.
 
-![The balance states: at the limit, understeer, a controlled drift with numbers mode on, and oversteer](docs/balance.png)
+![The balance states: at the limit, understeer, oversteer, and a drift with numbers mode on](docs/balance.png)
 
 ## Install
 
@@ -30,7 +30,7 @@ It shows the car the camera is on, so it works in replays and while spectating t
 | Green outline on a tyre | Drive torque is going through it |
 | Red outline on a tyre | It's being braked (brakes or engine braking) |
 | Blue arc from the top of the rim | Steering input |
-| Wedge just inside the steering arc (only when the car is off balance) | How much the car is actually turning. Yellow: one end, or both, is nearing its limit. Orange-red: understeer. Pink-magenta: oversteer, the rear sliding. Aquamarine: a drift or an all-wheel-drive powerslide you're holding |
+| Wedge just inside the steering arc (only when the car is off balance) | How much the car is actually turning. Yellow: one end, or both, is nearing its limit. Orange-red: understeer. Pink-magenta: oversteer, the rear stepping out. Aquamarine: a drift (the rear over 10° at more than 20 km/h), or an all-wheel-drive powerslide you're holding |
 | Red arc from the bottom, towards the left | Brake pedal (pulses while ABS works) |
 | Green arc from the bottom, towards the right | Throttle (pulses darker while traction control cuts power) |
 | Thin white arc along the edge, over the throttle | Clutch pedal |
@@ -41,7 +41,23 @@ It shows the car the camera is on, so it works in replays and while spectating t
 
 ![Wheels: locked, ABS, going light, off the ground](docs/wheels.png)
 
-The direction marker, the steering scale (stretched around the centre, more so with speed), the state colours and how long each is held, the G-force smoothing and the drift and powerslide rules all work as in the BeamNG README. That README has the details.
+The direction marker, the steering scale (stretched around the centre, more so with speed), the state colours and how long each is held, the G-force smoothing and the powerslide rule all work as in the BeamNG README. That README has the details.
+
+## Drift
+
+Drift detection uses the rule from Damgam's **Drift Scoring** app:
+
+- **The drift angle** is the rear tyres' slip angle as AC reports it (the larger of the two, from the wheels on the ground).
+- **It's a drift** when that angle is over **10°** at more than **20 km/h**. Braking or the handbrake doesn't stop it counting.
+- **Going backwards**, the angle is measured from the other end (180° minus the slip angle), as in Drift Scoring.
+- **Past 120°** it's a spin, not a drift, and the marker goes back to pink.
+- **Through a transition** the angle passes through zero when you flick from one direction to the other. The drift is held for **0.5 s** so the colour doesn't drop out. It ends at once if you spin or drop under 20 km/h.
+
+While drifting, the marker and its band are aquamarine. Numbers mode shows **Drift** with the drift angle, like Drift Scoring's angle meter.
+
+A rear stepping out by less than 10°, or a slide below 20 km/h, is still oversteer (pink). Drift Scoring's off-track, direction-of-lap and scoring rules don't apply here: a slide on the grass is still a slide.
+
+This replaces the BeamNG version's "controlled drift" test, which also wanted the front wheels pointing almost exactly where the front was going and the slide not growing. That was too strict: it hardly ever showed.
 
 ## Drivetrain
 
@@ -97,6 +113,9 @@ The rest are constants at the top of `src/telemetry.lua` (the `TUNE` table) and 
 | `PAST_ON` | 1.0 | Front `ndSlip` from which it's past its peak (understeer, when it's also nearer its limit than the rear) |
 | `SR_PEAK` | 0.12 | Slip ratio shown as full drive or braking on a tyre's outline |
 | `SR_ABS` | 0.04 | Braking slip ratio from which a wheel gets the ABS dot while ABS works |
+| `DRIFT_MIN_ANGLE` / `DRIFT_MAX_ANGLE` | 10 / 120 | Rear slip angle (degrees) from which it's a drift, and past which it's a spin |
+| `DRIFT_MIN_SPEED` | 20 | km/h a drift must be faster than |
+| `DRIFT_HOLD` | 0.5 | Seconds a drift is held after the angle drops (through a transition) |
 | `MID_ENGINE_BELOW` / `REAR_ENGINE_BELOW` | 0.47 / 0.40 | Weight on the front below which the engine is placed mid or rear (automatic engine position) |
 
 After editing, restart the session, or close the app and open it again. It's fully unloaded when closed.
@@ -120,7 +139,8 @@ This port hasn't run in Assetto Corsa itself yet. It was tested outside the game
 - **The scenarios:**
   - a balanced corner, which reads *at the limit*;
   - hard turn-in on an understeery car: *front near limit*, then *understeer*;
-  - a growing slide, a held 30° drift (*controlled drift*), the same drift with the steering 20° off (*oversteer*), and a spin;
+  - the rear stepping out under 10° (*oversteer*), then a growing slide past 10°, a held 30° drift and the same drift with the steering 20° off (all *drift*);
+  - a flick from a left drift to a right one through zero (held as *drift*), a spin past 120° going backwards (drift ends), and a 25° slide at 15 km/h (*oversteer*, too slow to count);
   - straight braking with and without ABS;
   - a wheel lifting and a blown tyre;
   - all four drive layouts;

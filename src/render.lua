@@ -37,6 +37,22 @@ function D.arc(x, y, r, a0, a1, c, th)
   ui.pathArcTo(vec2(x, y), r, a0, a1, max(4, floor((a1 - a0) / (2 * pi) * 96) + 1))
   ui.pathStroke(c, false, th)
 end
+-- An arc that starts on the vertical line through the centre (at the top or the bottom) and runs
+-- from there to aEnd, its start cut exactly vertical. A stroked arc's end is square to its last
+-- segment, which is a chord a little off the circle, so drawn plainly the start leans. Instead
+-- the arc is drawn on past the start and clipped at the centre line.
+local ARC_OVERRUN = 0.12   -- rad
+function D.arcFromCentre(x, y, r, aStart, aEnd, c, th)
+  local span = aEnd - aStart
+  if abs(span) < 0.004 then return end
+  if not ui.pushClipRect then return D.arc(x, y, r, min(aStart, aEnd), max(aStart, aEnd), c, th) end
+  local ext = aStart - (span > 0 and ARC_OVERRUN or -ARC_OVERRUN)
+  local m = r + th * 2
+  if cos(aStart + span / 2) >= 0 then ui.pushClipRect(vec2(x, y - m), vec2(x + m, y + m), true)   -- right of the centre
+  else ui.pushClipRect(vec2(x - m, y - m), vec2(x, y + m), true) end                               -- left of it
+  D.arc(x, y, r, min(ext, aEnd), max(ext, aEnd), c, th)
+  ui.popClipRect()
+end
 function D.poly(pts, c)   -- convex polygon, filled; pts = { x1, y1, x2, y2, ... }
   for k = 1, #pts, 2 do ui.pathLineTo(vec2(pts[k], pts[k + 1])) end
   ui.pathFillConvex(c)
@@ -264,16 +280,15 @@ local function drawInputArcs(cx, cy, rPx, inp, mk)
   steerVis = steerVis * steerVis * (3 - 2 * steerVis)
   if steerVis > 0 then
     local c = mix(INPUT.steer, INPUT.steer, 0, steerVis)
-    if steerShown > 0 then D.arc(cx, cy, r, TOP - steerShown * Q, TOP, c, lw)
-    else D.arc(cx, cy, r, TOP, TOP - steerShown * Q, c, lw) end
+    D.arcFromCentre(cx, cy, r, TOP, TOP - steerShown * Q, c, lw)
   end
   local pulse = 0.5 + 0.5 * sin(MS.now / 1000 * 2 * pi * PULSE_HZ)
-  D.arc(cx, cy, r, BOTTOM, BOTTOM + brk * Q, mix(INPUT.brake, INPUT.brakePulse, inp.abs and pulse or 0), lw)
-  D.arc(cx, cy, r, BOTTOM - thr * Q, BOTTOM, mix(INPUT.throttle, INPUT.throttlePulse, inp.tcs and pulse or 0), lw)
+  D.arcFromCentre(cx, cy, r, BOTTOM, BOTTOM + brk * Q, mix(INPUT.brake, INPUT.brakePulse, inp.abs and pulse or 0), lw)
+  D.arcFromCentre(cx, cy, r, BOTTOM, BOTTOM - thr * Q, mix(INPUT.throttle, INPUT.throttlePulse, inp.tcs and pulse or 0), lw)
   local clu, hb = clamp(inp.c or 0, 0, 1), clamp(inp.p or 0, 0, 1)
   local r2 = rPx - lw / 4
-  D.arc(cx, cy, r2, BOTTOM, BOTTOM + hb * Q, mix(INPUT.handbrake, INPUT.handbrake, 0), lw / 2)
-  D.arc(cx, cy, r2, BOTTOM - clu * Q, BOTTOM, mix(INPUT.clutch, INPUT.clutch, 0), lw / 2)
+  D.arcFromCentre(cx, cy, r2, BOTTOM, BOTTOM + hb * Q, mix(INPUT.handbrake, INPUT.handbrake, 0), lw / 2)
+  D.arcFromCentre(cx, cy, r2, BOTTOM, BOTTOM - clu * Q, mix(INPUT.clutch, INPUT.clutch, 0), lw / 2)
 
   -- the direction marker, with a band in its colour back to the end of the steering arc
   local alpha = clamp(inp.ta or 0, 0, 1) * mk.a

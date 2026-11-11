@@ -1,8 +1,8 @@
 -- VGS Display for Assetto Corsa (Custom Shaders Patch Lua app)
 -- ---------------------------------------------------------------------------
 -- A live grip display inspired by the VGS in Enthusia Professional Racing, ported from the
--- BeamNG.drive version. Click the app for the numbers mode; the settings (the cog on the app's
--- title bar) hold the units, the engine position and a few diagnostics.
+-- BeamNG.drive version. The settings (the cog on the app's title bar) hold the engine position,
+-- whether to draw the drivetrain, and a few diagnostics.
 -- ---------------------------------------------------------------------------
 
 local T = require('src/telemetry')
@@ -10,14 +10,11 @@ local R = require('src/render')
 
 local sim = ac.getSim()
 local config = ac.storage({
-  numbers = false,      -- numbers mode (click the app)
-  units = 1,            -- 1 = kg, 2 = lb
   engine = 1,           -- 1 = auto, 2 = front, 3 = mid, 4 = rear, 5 = transverse (front-wheel drive)
   drivetrain = true,    -- draw the drivetrain under the wheels
 })
 local ENGINE = { 'auto', 'front', 'mid', 'rear', 'transverse' }
 
-local press = nil
 local err = { msg = nil, count = 0, next = 0 }
 
 local function report(where, e)
@@ -29,26 +26,13 @@ local function report(where, e)
   end
 end
 
-local function handleClick()
-  local L = ui.MouseButton and ui.MouseButton.Left or 0
-  if ui.windowHovered() and ui.mouseClicked(L) then
-    local p = ui.mousePos()
-    press = { x = p.x, y = p.y }
-  end
-  if press and ui.mouseReleased(L) then
-    local p = ui.mousePos()
-    if math.abs(p.x - press.x) + math.abs(p.y - press.y) < 4 then config.numbers = not config.numbers end
-    press = nil
-  end
-end
-
 function script.windowMain(dt)
   local car = ac.getCar(sim.focusedCar) or ac.getCar(0)
   local okP, paused = pcall(function() return sim.isPaused end)
   local stepDt = (okP and paused) and 0 or dt
   local body, why
   local ok, e = pcall(function()
-    body, why = T.update(car, stepDt, { engine = ENGINE[config.engine] or 'auto', detail = config.numbers })
+    body, why = T.update(car, stepDt, { engine = ENGINE[config.engine] or 'auto' })
   end)
   if not ok then
     report('update', e)
@@ -57,11 +41,9 @@ function script.windowMain(dt)
   end
   local size = ui.windowSize()
   local okD, eD = pcall(R.draw, body, size.x, size.y, dt * 1000, {
-    numbers = config.numbers, units = config.units == 2 and 'lb' or 'kg',
     drivetrain = config.drivetrain, message = why,
   })
   if not okD then report('draw', eD); pcall(R.reset) end
-  handleClick()
 end
 
 local function fmtNum(v, d) if type(v) ~= 'number' then return '–' end return string.format('%.' .. (d or 2) .. 'f', v) end
@@ -69,10 +51,7 @@ local STATE_NAME = { [0] = 'neutral', 'front near limit', 'understeer', 'rear ne
 
 function script.windowSettings(dt)
   ui.header('Display')
-  if ui.checkbox('Numbers mode (or click the app)', config.numbers) then config.numbers = not config.numbers end
   if ui.checkbox('Show the drivetrain', config.drivetrain) then config.drivetrain = not config.drivetrain end
-  ui.text('Weight unit')
-  config.units = ui.combo('##units', config.units, ui.ComboFlags and ui.ComboFlags.None or 0, { 'kg', 'lb' })
   ui.offsetCursorY(8)
   ui.header('Engine position')
   ui.textWrapped('AC doesn\'t say where a car\'s engine sits. It\'s placed from the car\'s tags, its maker and model, its description, or else its weight distribution. Pick it here if that guesses wrong.')

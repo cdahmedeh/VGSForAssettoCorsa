@@ -522,7 +522,7 @@ local function calibrate(dt, steerRaw, speed, gas, brake)
 end
 
 -- ===== Main update ==========================================================
--- car: ac.StateCar. opts: { engine = 'auto'|'front'|'mid'|'rear'|'transverse', detail = bool }
+-- car: ac.StateCar. opts: { engine = 'auto'|'front'|'mid'|'rear'|'transverse' }
 -- Returns the body to draw, or nil (and a reason) when there's nothing to show yet.
 function T.update(car, dt, opts)
   opts = opts or {}
@@ -707,7 +707,6 @@ function T.update(car, dt, opts)
     wo.lf = (light > 0.02) and light or nil
     wo.fl = blown and 1 or nil
     wo.iv = iv
-    wo.fz = opts.detail and load or nil
   end
   est.frontSteer = fN > 0 and fSum / fN or nil
   est.rearSteer = rN > 0 and rSum / rN or 0
@@ -851,15 +850,11 @@ function T.update(car, dt, opts)
   o.sources[1].tc = tcOn and 1 or nil
   o.id = car.index
 
-  -- numbers mode: the axle slip angles in the turn's direction
-  if opts.detail then
-    o.vd = o.vd or {}
-    o.vd.af, o.vd.ar = slipF * turn, slipR * turn
-    o.vd.sl = (est.state == 6) and abs(slipR) or nil
-    o.vd.da = est.drifting and est.driftAngle or nil   -- the drift angle, in degrees
-  else
-    o.vd = nil
-  end
+  -- for the balance readout: the axle slip angles in the turn's direction
+  o.vd = o.vd or {}
+  o.vd.af, o.vd.ar = slipF * turn, slipR * turn
+  o.vd.sl = (est.state == 6) and abs(slipR) or nil
+  o.vd.da = est.drifting and est.driftAngle or nil   -- the drift angle, in degrees
   return o
 end
 

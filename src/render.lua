@@ -12,7 +12,7 @@
 --                balance: yellow warnings, orange-red understeer, pink-magenta oversteer,
 --                aquamarine a drift, or an all-wheel-drive powerslide
 --   Yellow dot : the G-force, with a fading trail
--- Numbers mode adds grip and load by every corner, and the balance in words and degrees.
+--   Above the car: the balance in words, with its angle in degrees
 -- All drawing goes through D (below), so the renderer can run outside the game too.
 -- ---------------------------------------------------------------------------
 
@@ -197,13 +197,17 @@ local function geometry(body)
   g.boxHalfW, g.boxHalfH = (box.x1 - box.x0) / 2, (box.y1 - box.y0) / 2
   g.centreX = mid
   -- radius (metres from the body centre) the circle must hold: body, tyres at any steer, engine
-  local rM = hypot(g.boxHalfW, g.boxHalfH)
+  -- (each point: across, along, and the room it needs around it)
+  local pts = { { g.boxHalfW, g.boxHalfH, 0 }, { g.boxHalfW, -g.boxHalfH, 0 } }
   for _, w in ipairs(wheels) do
     local ox, oy = abs(w._mx - g.cx), w.y - g.cy
-    rM = max(rM, hypot(ox, oy) + hypot(w._wd, w._len) / 2, hypot(ox + w._wd / 2 + DOT_SPACE, oy))
+    pts[#pts + 1] = { ox, oy, hypot(w._wd, w._len) / 2 }
+    pts[#pts + 1] = { ox + w._wd / 2 + DOT_SPACE, oy, 0 }
   end
-  for _, s in ipairs(body.sources) do rM = max(rM, hypot(s.x - g.cx, s.y - g.cy) + hypot(ENGINE_W, ENGINE_H) / 2) end
-  g.fitR = rM
+  for _, s in ipairs(body.sources) do pts[#pts + 1] = { abs(s.x - g.cx), s.y - g.cy, hypot(ENGINE_W, ENGINE_H) / 2 } end
+  local rM = 0
+  for _, q in ipairs(pts) do rM = max(rM, hypot(q[1], q[2]) + q[3]) end
+  g.fitR, g.pts = rM, pts
   return g
 end
 
@@ -620,7 +624,7 @@ local function drawAssistDots(body, wheelPoint, dims)
   end
 end
 
--- ===== Numbers mode =========================================================
+-- ===== The balance readout (in words and degrees, above the car) ===========
 local READ_MS = 150
 local read = { acc = {}, val = {}, t0 = 0 }
 local function readAdd(key, v)
@@ -640,63 +644,11 @@ local function readTick(now)
 end
 local function readGet(key, fallback) local v = read.val[key] if v == nil then return fallback end return v end
 
-local DIM_TEXT = col(255, 255, 255, 0.55)
-local function cornerFont(tyreH) return clamp(tyreH * 0.33, 10, 15) end
 local function fmt(v, d)
   if v == nil or v ~= v then return '–' end
   local s = string.format('%.' .. (d or 0) .. 'f', v)
   if s:match('^%-0%.?0*$') then s = s:sub(2) end
   return (s:gsub('%-', '−'))
-end
-
-local function drawCornerReadouts(body, wheelPoint, dims, circle, units)
-  local blocks = {}
-  for _, wh in ipairs(body.w) do
-    local grip = readGet('w' .. wh.i .. '.g', wh.g or 0)
-    local load = wh.fz and readGet('w' .. wh.i .. '.fz', wh.fz) or nil
-    local pt, d = wheelPoint(wh), dims(wh)
-    local onLeft = wh._side < 0
-    local fs = cornerFont(d.h)
-    local small = fs * 0.88
-    local lines = {}
-    local gc
-    if wh.a == 1 then gc = STYLE.airborne
-    elseif (wh.lf or 0) >= 0.5 then gc = mix(STYLE.airLight, STYLE.airLight, 0)
-    elseif wh.e == 1 then gc = slideColour(wh.ex)
-    else gc = STYLE.text end
-    lines[1] = { s = (grip >= 3 and '300+' or floor(grip * 100 + 0.5)) .. '%', px = fs, w = 600, c = gc }
-    if load and not circle.compact then
-      local kg = max(0, load) / 9.81
-      local v, u = kg, 'kg'
-      if units == 'lb' then v, u = kg * 2.20462262, 'lb' end
-      lines[2] = { s = fmt(v, 0) .. ' ' .. u, px = small, w = 400, c = DIM_TEXT }
-    end
-    local widest, height = 0, 0
-    for _, l in ipairs(lines) do l.width = D.measure(l.s, l.px, l.w); widest = max(widest, l.width); height = height + l.px * 1.2 end
-    blocks[#blocks + 1] = { wh = wh, pt = pt, d = d, onLeft = onLeft, lines = lines, widest = widest, height = height, y0 = pt.y - height / 2 }
-  end
-  for _, b in ipairs(blocks) do
-    local wh, pt, d = b.wh, b.pt, b.d
-    local r = dotRadius(d.w)
-    local clear = d.w / 2 + abs(sin(wh.s or 0)) * d.h / 2 + max(3, r) + 2 * r + 4
-    local tx, align = b.onLeft and pt.x - clear or pt.x + clear, b.onLeft and 'right' or 'left'
-    local y0 = b.y0
-    local worst = max(abs(y0 - circle.cy), abs(y0 + b.height - circle.cy))
-    local half = sqrt(max(0, circle.r * circle.r - worst * worst)) - 3
-    local reachX = d.w / 2 + abs(sin(wh.s or 0)) * d.h / 2 + 2
-    if b.onLeft then
-      tx = max(tx, circle.cx - half + b.widest)
-      if tx > pt.x - reachX then tx, align = pt.x + reachX + 2, 'left' end
-    else
-      tx = min(tx, circle.cx + half - b.widest)
-      if tx < pt.x + reachX then tx, align = pt.x - reachX - 2, 'right' end
-    end
-    local y = y0
-    for _, l in ipairs(b.lines) do
-      y = y + l.px * 1.2
-      D.text(l.s, tx, y - l.px * 0.24, l.px, l.w, l.c, align, true)
-    end
-  end
 end
 
 local function balanceFont(rPx) return clamp(rPx * 0.058, 8.5, 11) end
@@ -738,28 +690,22 @@ local function drawBalance(body, cx, cy, inner, rPx, compact, mk)
   D.text(word, cx, top + L.h1 + L.fs, L.fs, 600, c, 'center', true)
 end
 
--- how much smaller the car is drawn in numbers mode so every readout fits inside the circle
-local function readoutShrink(body, g, scale, inner, band, compact)
-  local sample, nLines = compact and '100%' or '1888 kg', compact and 1 or 2
+-- How much smaller, and how far lower, the car is drawn so it sits below the balance readout
+-- and still inside the circle. Returns the scale factor and the drop in pixels.
+local function carFit(g, scale, inner, band)
+  local room = inner - band - 2
   local k = 1
   while k >= 0.35 do
     local s2 = scale * k
-    local ok = g.boxHalfH * s2 <= inner - band - 2
-    for _, w in ipairs(body.w) do
-      if not ok then break end
-      local tw, th = max(w._wd * s2, MIN_TYRE_W), max(w._len * s2, MIN_TYRE_L)
-      local fs = cornerFont(th)
-      local textW = D.measure(sample, compact and fs or fs * 0.88, compact and 600 or 400)
-      local textH = fs * 1.2 * nLines
-      local x = abs(w._mx - g.cx) * s2 + tw / 2 + dotRadius(tw) * 3 + 7 + textW
-      local y = abs(w.y - g.cy) * s2 + textH / 2
-      if x * x + y * y > (inner - 3) * (inner - 3) then ok = false end
-      if w.y > g.cy and (w.y - g.cy) * s2 + textH / 2 > inner - band - 2 then ok = false end
+    local off = max(0, g.boxHalfH * s2 - room)
+    local ok = true
+    for _, q in ipairs(g.pts) do
+      if hypot(q[1] * s2, off - q[2] * s2) + q[3] * s2 > inner then ok = false break end
     end
-    if ok then return k end
+    if ok then return k, off end
     k = k - 0.025
   end
-  return 0.35
+  return 0.35, max(0, g.boxHalfH * scale * 0.35 - room)
 end
 
 -- ===== Frame ================================================================
@@ -776,7 +722,7 @@ local function drawEmpty(W, H, msg)
 end
 
 -- body: telemetry output (or nil); W, H: the window's size; dtMs: time since the last frame;
--- opts: { numbers = bool, units = 'kg'|'lb', message = string }
+-- opts: { drivetrain = bool, message = string }
 function R.draw(body, W, H, dtMs, opts)
   MS.now = MS.now + (dtMs or 16)
   opts = opts or {}
@@ -794,7 +740,6 @@ function R.draw(body, W, H, dtMs, opts)
   local ccx, ccy = W / 2, H / 2
   local inner = rPx - clamp(rPx * 0.05, 3, 7) - markerSize(rPx) - 2
   local compact = rPx < COMPACT_BELOW
-  local band = opts.numbers and balanceLayout(rPx, inner, compact).band or 0
 
   D.circleFilled(ccx, ccy, rPx, STYLE.panelFill)
   D.circle(ccx, ccy, rPx, STYLE.panelStroke, 1.5)
@@ -802,25 +747,21 @@ function R.draw(body, W, H, dtMs, opts)
   drawInputArcs(ccx, ccy, rPx, body.inp, mk)
 
   local scale = inner / g.fitR
-  if opts.numbers then
-    local key = string.format('%.4f|%.2f|%s', scale, inner, tostring(compact))
-    if shrinkCache.geo ~= g or shrinkCache.key ~= key then
-      local k = readoutShrink(body, g, scale, inner, band, compact)
-      local cmp = compact
-      -- the full readouts would squeeze the car to nothing: show just the grip, short words
-      if k < 0.6 and not compact then
-        cmp = true
-        k = readoutShrink(body, g, scale, inner, balanceLayout(rPx, inner, true).band, true)
-      end
-      shrinkCache.geo, shrinkCache.key, shrinkCache.k, shrinkCache.compact = g, key, k, cmp
+  local key = string.format('%.4f|%.2f|%s', scale, inner, tostring(compact))
+  if shrinkCache.geo ~= g or shrinkCache.key ~= key then
+    local cmp = compact
+    local k, off = carFit(g, scale, inner, balanceLayout(rPx, inner, cmp).band)
+    -- the full words would squeeze the car too much: use the short ones
+    if k < 0.6 and not cmp then
+      cmp = true
+      k, off = carFit(g, scale, inner, balanceLayout(rPx, inner, cmp).band)
     end
-    scale = scale * shrinkCache.k
-    if shrinkCache.compact ~= compact then
-      compact = shrinkCache.compact
-      band = balanceLayout(rPx, inner, compact).band
-    end
+    shrinkCache.geo, shrinkCache.key, shrinkCache.k, shrinkCache.off, shrinkCache.compact = g, key, k, off, cmp
   end
-  local function map(x, y) return { x = ccx + (x - g.cx) * scale, y = ccy - (y - g.cy) * scale } end
+  scale = scale * shrinkCache.k
+  compact = shrinkCache.compact
+  local carY = ccy + shrinkCache.off
+  local function map(x, y) return { x = ccx + (x - g.cx) * scale, y = carY - (y - g.cy) * scale } end
   local function dims(w) return { w = max(w._wd * scale, MIN_TYRE_W), h = max(w._len * scale, MIN_TYRE_L) } end
   local function wheelPoint(w) return map(w._mx, w.y) end
   local function tyreBox(w)
@@ -833,7 +774,7 @@ function R.draw(body, W, H, dtMs, opts)
 
   if g.hasExt then
     local hw, hh = g.boxHalfW * scale, g.boxHalfH * scale
-    D.rect(ccx - hw, ccy - hh, ccx + hw, ccy + hh, STYLE.panelStroke, 1, min(6, hw * 0.2))
+    D.rect(ccx - hw, carY - hh, ccx + hw, carY + hh, STYLE.panelStroke, 1, min(6, hw * 0.2))
   end
   if opts.drivetrain ~= false then drawDrivetrain(body, g, map, scale, wheelPoint, tyreBox) end
   if body.gf then drawGForce(ccx, ccy, rPx, body.gf) end
@@ -843,20 +784,12 @@ function R.draw(body, W, H, dtMs, opts)
   end
   drawAssistDots(body, wheelPoint, dims)
 
-  if opts.numbers then
-    for _, w in ipairs(body.w) do
-      readAdd('w' .. w.i .. '.g', w.g)
-      if w.fz then readAdd('w' .. w.i .. '.fz', w.fz) end
-    end
-    local vd = body.vd
-    if vd and vd.af and vd.ar then readAdd('bal', (vd.af - vd.ar) * 180 / pi) end
-    if vd and vd.sl then readAdd('sl', vd.sl * 180 / pi) end
-    if vd and vd.da then readAdd('da', vd.da) end
-    readTick(MS.now)
-    local circle = { cx = ccx, cy = ccy, r = inner, compact = compact }
-    drawCornerReadouts(body, wheelPoint, dims, circle, opts.units)
-    drawBalance(body, ccx, ccy, inner, rPx, compact, mk)
-  end
+  local vd = body.vd
+  if vd and vd.af and vd.ar then readAdd('bal', (vd.af - vd.ar) * 180 / pi) end
+  if vd and vd.sl then readAdd('sl', vd.sl * 180 / pi) end
+  if vd and vd.da then readAdd('da', vd.da) end
+  readTick(MS.now)
+  drawBalance(body, ccx, ccy, inner, rPx, compact, mk)
 end
 
 function R.reset() trail, markState, geoCache.body = {}, nil, nil end

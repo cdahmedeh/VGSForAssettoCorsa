@@ -1,6 +1,6 @@
 # VGS Display for Assetto Corsa
 
-**Version 1.02**
+**Version 1.10**
 
 A live grip display for Assetto Corsa, ported from the BeamNG.drive version (2.5) and inspired by the VGS (Vehicle Gravity System) in Enthusia Professional Racing. It shows what a simulator can't let you feel: how hard each tyre is working, when one lets go and how badly, where the car is really going against where you're steering, and whether it's the front or the rear that's giving up.
 
@@ -8,7 +8,7 @@ It's a Custom Shaders Patch (CSP) Lua app. The picture and colours are the BeamN
 
 Every readout in 1.0 was checked against the exact values in a vehicle simulation: 22 cars, nearly 700 runs. [How it was tested](#how-it-was-tested) has the numbers.
 
-![The balance states: at the limit, understeer, oversteer, and a drift with numbers mode on](docs/balance.png)
+![The balance states: at the limit, understeer, oversteer, and a drift](docs/balance.png)
 
 ## Install
 
@@ -17,7 +17,7 @@ Every readout in 1.0 was checked against the exact values in a vehicle simulatio
 3. In a session, open the app bar on the right of the screen and switch on **VGS Display**.
 4. Move it and resize it to taste. The circle always fills the window.
 
-**Click the app** to switch numbers mode on or off. The cog on its title bar opens the settings: weight unit, engine position, whether to draw the drivetrain, and a diagnostics panel.
+The cog on its title bar opens the settings: engine position, whether to draw the drivetrain, and a diagnostics panel.
 
 It shows the car the camera is on, so it works in replays and while spectating too.
 
@@ -74,7 +74,7 @@ Drift detection uses the rule from Damgam's **Drift Scoring** app:
 - **Past 120°** it's a spin, not a drift, and the marker goes back to pink (oversteer).
 - **Through a transition** the angle passes through zero when you flick from one direction to the other. The drift is held for **0.5 s** so the colour doesn't drop out. It ends at once if you spin or drop under 20 km/h.
 
-While drifting, the marker and its band are aquamarine. Numbers mode shows **Drift** with the drift angle, like Drift Scoring's angle meter.
+While drifting, the marker and its band are aquamarine, and the [balance readout](#the-balance-readout) shows **Drift** with the drift angle, like Drift Scoring's angle meter.
 
 A rear stepping out by less than 10°, or a slide below 20 km/h, is still oversteer (pink). Drift Scoring's off-track, direction-of-lap and scoring rules don't apply here: a slide on the grass is still a slide.
 
@@ -96,11 +96,13 @@ Under the wheels: the engine, gearbox, differentials and shafts, tinted green wh
 
   The weight alone can't tell a mid-engined Lotus (38 % on the front) from a rear-engined Porsche 911 (39 %), or a front-engined Ferrari F12 (46 %) from a mid-engined Cayman (45 %). On 248 real cars (most of the Kunos cars and many others, with their weight distributions approximated; 56 of them checked only after the table was written), the weight alone placed 90 % right and the four steps together all of them. The settings' diagnostics say which step placed it. If it's still wrong for a car, pick the position in the settings.
 
-## Numbers mode
+## The balance readout
 
-![Numbers mode at 120, 200 and 320 pixels](docs/numbers.png)
+![The balance readout at 120, 200 and 320 pixels](docs/sizes.png)
 
-By each tyre: its grip in use (100 % is the peak of its curve; above that it's past it) and the weight on it. At the top: the balance in words, in the marker's colour, with how many degrees more one axle is slipping than the other (to within about 0.3° in the tests). In a small app (under about 200 px, or wherever the full readouts wouldn't fit) only the grip is shown and the words are shortened. Each number is averaged over 150 ms so it can be read.
+Above the car, whenever the marker shows a state: the state in words, in the marker's colour, with an angle above it. For the near-limit, at-the-limit, understeer and oversteer states, the angle is how many degrees more one axle is slipping than the other (to within about 0.3° in the tests). For a drift it's the drift angle, and for a powerslide the rear tyres' slip angle. With the car within its grip, nothing is shown. The angle is averaged over 150 ms so it can be read.
+
+The car is drawn a little smaller and lower to make room for it. In a small app (under about 125 px across, or wherever the full words would squeeze the car too much) the words are shortened: *Front near*, *Rear near*, *At limit*, *Under*, *Over*.
 
 ## What's different from the BeamNG version
 
@@ -118,6 +120,7 @@ AC reports some things BeamNG doesn't, and the other way round.
 - **Shafts**: drive is shown while you're on the throttle, and engine braking while you're off the throttle and the brakes. Under braking the shafts stay grey, because friction braking and engine braking can't be told apart.
 - **The slide colour** uses the same slip-ratio scale as BeamNG (pink up to 30 %, deepest red at 100 %), worked out from the tyre's slip ratio and slip angle.
 - **Signs are learnt, not assumed.** Which way the steering input points, the yaw rate's sign and the slip ratio's sign are each checked against the car's own motion within the first moments of driving. The diagnostics panel shows what was learnt.
+- **No numbers mode.** The [balance readout](#the-balance-readout) is always on. There are no grip or weight figures by the tyres.
 - **The steering's full lock** is read from `car.ini` (the steering wheel's lock over the rack's ratio), so the direction marker's scale is right from the first frame. The BeamNG version learnt it, and the AC port did until 1.0.
 
 **Not available in AC:**
@@ -130,7 +133,7 @@ AC reports some things BeamNG doesn't, and the other way round.
 
 ## Settings you can change
 
-In the app's settings window: numbers mode, weight unit (kg or lb), engine position, and whether to draw the drivetrain. The diagnostics there show what the app has read and learnt about the car: its layout, where the engine position came from, the full lock, each axle's peak slip ratio, the signs, and the live balance.
+In the app's settings window: engine position, and whether to draw the drivetrain. The diagnostics there show what the app has read and learnt about the car: its layout, where the engine position came from, the full lock, each axle's peak slip ratio, the signs, and the live balance.
 
 The rest are constants at the top of `src/telemetry.lua` (the `TUNE` table) and `src/render.lua`. Most keep their BeamNG names and meanings. The AC-specific ones:
 
@@ -210,9 +213,9 @@ Tyre peaks from 5° to 10° slip angle and 7 % to 14 % slip ratio, grip from 0.9
 | Torque outline, error (share of grip) | 0.12 | 0.05 |
 | Grip bar, error (share of the peak) | 0.037 | 0.029 |
 | Direction marker, error (road-wheel degrees) | 0.28° | 0.15° |
-| Axle slip angles (numbers mode), error | 0.42° front, 0.51° rear | 0.29°, 0.29° |
+| Axle slip angles (the balance readout), error | 0.42° front, 0.51° rear | 0.29°, 0.29° |
 | Wheel steering angles, drawn wheel positions and tyre sizes | exact | exact |
-| Pedals (to the whole percent), steering input, drift angle, weights | exact | exact |
+| Pedals (to the whole percent), steering input, drift angle | exact | exact |
 
 The variants agreed as well (balance state 88.6 % before, 95.2 % after; oversteer from 22 % to 93 % found). In the robustness runs every sign was learnt, the app opened mid-corner now reads the steering to within half a degree from the first frame (it was 3.5° off until the wheels were next straight), and a car without `steerLock` now gets its lock from `car.ini`.
 

@@ -1,6 +1,6 @@
 # VGS Display for Assetto Corsa
 
-**Version 1.0**
+**Version 1.02**
 
 A live grip display for Assetto Corsa, ported from the BeamNG.drive version (2.5) and inspired by the VGS (Vehicle Gravity System) in Enthusia Professional Racing. It shows what a simulator can't let you feel: how hard each tyre is working, when one lets go and how badly, where the car is really going against where you're steering, and whether it's the front or the rear that's giving up.
 

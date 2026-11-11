@@ -10,7 +10,7 @@
 --                bottom-right, clutch and handbrake along the outer edge
 --   Wedge      : the direction marker (how much the car is actually turning), coloured by the
 --                balance: yellow warnings, orange-red understeer, pink-magenta oversteer,
---                aquamarine a drift, or a controlled all-wheel-drive powerslide
+--                aquamarine a drift, or an all-wheel-drive powerslide
 --   Yellow dot : the G-force, with a fading trail
 -- Numbers mode adds grip and load by every corner, and the balance in words and degrees.
 -- All drawing goes through D (below), so the renderer can run outside the game too.
@@ -702,9 +702,9 @@ end
 local function balanceFont(rPx) return clamp(rPx * 0.058, 8.5, 11) end
 local function degreeFont(rPx) return balanceFont(rPx) * 1.15 end
 local STATE_WORD = { near = 'Front near limit', rnear = 'Rear near limit', limit = 'At the limit', under = 'Understeer',
-                     over = 'Oversteer', drift = 'Drift', pslide = 'Controlled powerslide' }
+                     over = 'Oversteer', drift = 'Drift', pslide = 'Powerslide' }
 local SHORT_WORD = { ['Understeer'] = 'Under', ['Front near limit'] = 'Front near', ['Rear near limit'] = 'Rear near',
-                     ['At the limit'] = 'At limit', ['Oversteer'] = 'Over', ['Controlled powerslide'] = 'Powerslide' }
+                     ['At the limit'] = 'At limit', ['Oversteer'] = 'Over' }
 local function chordDrop(inner, width)
   local half = width / 2 + 4
   if half >= inner then return inner end
@@ -714,7 +714,10 @@ local function balanceLayout(rPx, inner, compact)
   local fs, dfs = balanceFont(rPx), degreeFont(rPx)
   local h1, h2 = dfs, fs * 1.15
   local w1 = D.measure('88.8°', dfs, 700)
-  local w2 = D.measure(compact and 'Powerslide' or 'Controlled powerslide', fs, 600)
+  local w2 = 0
+  for _, word in pairs(STATE_WORD) do
+    w2 = max(w2, D.measure(compact and SHORT_WORD[word] or word, fs, 600))
+  end
   local drop = max(chordDrop(inner, w1), chordDrop(inner, w2) - h1) + 1
   return { fs = fs, dfs = dfs, drop = drop, h1 = h1, band = drop + h1 + h2 + fs * 0.25 }
 end

@@ -65,7 +65,7 @@ function script.windowMain(dt)
 end
 
 local function fmtNum(v, d) if type(v) ~= 'number' then return '–' end return string.format('%.' .. (d or 2) .. 'f', v) end
-local STATE_NAME = { [0] = 'neutral', 'front near limit', 'understeer', 'rear near limit', 'at the limit', 'oversteer / drift', 'controlled powerslide' }
+local STATE_NAME = { [0] = 'neutral', 'front near limit', 'understeer', 'rear near limit', 'at the limit', 'oversteer / drift', 'powerslide' }
 
 function script.windowSettings(dt)
   ui.header('Display')

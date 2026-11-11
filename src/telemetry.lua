@@ -6,16 +6,19 @@
 --   * its live steering angle, from the wheel's heading against the body
 --   * how much of the tyre's grip is in use (AC's own normalised slip: 1 = at the peak) and
 --     whether it's past the limit, and how far
---   * the torque through it (from its slip ratio): +1 full drive ... -1 full braking
+--   * the torque through it: the share of the tyre's grip the drive or braking is using, from its
+--     slip ratio against the tyre's own peak (learnt): +1 full drive ... -1 full braking
 --   * whether it's off the ground, or nearly, and whether ABS is working on it
 -- plus the driver's inputs, the G-force, how much the car is actually turning (the direction
--- marker) and its understeer / oversteer balance.
+-- marker) and its understeer / oversteer balance. Every readout was checked against the exact
+-- values in a vehicle simulation (see the README's "How it was tested").
 --
 -- It returns a "body" table in the same shape the BeamNG app's renderer drew from, so the
 -- renderer (render.lua) is a straight port of app.js.
 -- ---------------------------------------------------------------------------
 
 local T = {}
+local CarInfo = require('src/carinfo')
 
 -- ===== Tunables =============================================================
 local TUNE = {}
@@ -30,25 +33,32 @@ TUNE.SLIP_RATIO_PINK  = 0.30
 TUNE.SLIP_RATIO_FULL  = 1.00
 TUNE.PINK_SEVERITY    = 0.2   -- how far towards deep red the colour gets by the end of the pink band
 TUNE.RATIO_MIN_SPEED  = 5.0   -- m/s; the slip ratio is scaled down below this (no wild values at a crawl)
-TUNE.SR_PEAK          = 0.12  -- slip ratio drawn as full drive (green) or braking (red) on the outline
+TUNE.SR_PEAK          = 0.12  -- slip ratio drawn as full drive (green) or braking (red) on the outline, until
+                              -- each axle's own is learnt: the slip ratio at the tyres' peak, from ndSlip
+                              -- while they run nearly straight (|slip angle| < 1 deg): peak = |slip ratio| / ndSlip
+TUNE.SR_PEAK_TAU      = 1.0   -- s: how fast that's learnt
+-- The outline shows the share of the tyre's grip the drive or braking is using. Below the peak a
+-- tyre's force rises steeply with slip, then flattens (a Magic Formula shape, falling to about
+-- 80 % far past the peak): TYRE_SHAPE_C is that curve's shape factor.
+TUNE.TYRE_SHAPE_C     = 1.45
 TUNE.SR_ABS           = 0.04  -- braking slip ratio from which a wheel gets the ABS dot while ABS works
 TUNE.MIN_LOAD         = 150   -- N; below this a wheel has no grip ...
 TUNE.AIR_SHOW_AFTER   = 0.25  -- s ... and is shown off the ground once it stays that way this long
 TUNE.LIGHT_FRAC       = 0.25  -- a wheel carrying less than this share of its normal load is nearly off the ground
 TUNE.LIGHT_HZ         = 2     -- smoothing of the load for that (a bump doesn't flash it)
 TUNE.LIGHT_REF_TAU    = 2     -- s: how slowly the normal load is followed
-TUNE.GRIP_SMOOTHING   = 0.4   -- share of the gap closed every 1/30 s (higher = snappier)
+TUNE.GRIP_SMOOTHING   = 0.5   -- share of the gap closed every 1/30 s (higher = snappier)
 TUNE.STANDSTILL_SPEED = 0.5   -- m/s; below this the outline follows the brake pedal instead
 -- G-force dot: least-squares slope of the velocity over GF_WINDOW, then a two-stage One Euro filter
-TUNE.GF_WINDOW        = 0.10
-TUNE.GF_MIN_CUTOFF    = 0.6
+TUNE.GF_WINDOW        = 0.05
+TUNE.GF_MIN_CUTOFF    = 1.2
 TUNE.GF_BETA          = 3
 TUNE.GF_D_CUTOFF      = 0.5
 TUNE.GF_STAGES        = 2
 TUNE.GF_D_FLOOR       = 2
 -- Direction marker
-TUNE.TRAVEL_SMOOTH_HZ = 15
-TUNE.YAW_SMOOTH_HZ    = 12
+TUNE.TRAVEL_SMOOTH_HZ = 40
+TUNE.YAW_SMOOTH_HZ    = 30
 TUNE.MARK_YAW_HZ      = 10
 TUNE.TRAVEL_FADE_LO   = 0.5
 TUNE.TRAVEL_FADE_HI   = 1.5
@@ -70,8 +80,14 @@ TUNE.MARK_STEER_CUTOFF = 8
 TUNE.MARK_FAST_FROM   = 180
 TUNE.MARK_BETA2       = 0.002
 TUNE.MARK_D_FAST_CUTOFF = 2
--- Balance: oversteer is the rear slipping more than the front (in the direction the car is
--- turning) with the rear near or past its limit
+-- Balance. Each end's state is its tyres' own saturation (AC's ndSlip, load-weighted: 1 = the
+-- peak of the tyre's curve):
+--   understeer: the front past its peak, and further past it than the rear
+--   oversteer : the rear past its peak and stepping out (its tyres slipping at a bigger angle
+--               than the front's, in the direction the car is turning)
+--   near limit: an end at NEAR_ON of its peak or more, and nearer than the other (both: at the limit)
+-- all judged while the car is turning. (The balance value, inp.bal, still blends them for the
+-- numbers.)
 TUNE.BAL_DEADBAND     = 0.05
 TUNE.BAL_FULL         = 0.21
 TUNE.BAL_SLIP_START   = 0.08
@@ -85,8 +101,15 @@ TUNE.LEAD             = 0.15  -- one axle this much nearer its limit than the ot
 TUNE.WARN_HOLD        = 0.12  -- s an axle must stay near its limit before the warning shows
 TUNE.GRIP_HZ          = 6     -- smoothing of each axle's ndSlip
 TUNE.GRIP_MIN_SPEED   = 4     -- m/s: below this the limits aren't judged (fading in over 3 m/s)
-TUNE.US_WARN_SHARE    = 0.35  -- must match UNDER_WARN in render.lua
+TUNE.US_WARN_SHARE    = 0.35
 TUNE.US_MIN_YAW       = 0.10
+TUNE.PAST_OFF         = 0.92  -- an end past its peak (PAST_ON) is back under it below this
+TUNE.US_LEAD          = 0.10  -- understeer: the front this much further past its peak than the rear ...
+TUNE.US_LEAD_OFF      = 0.06  -- ... and it's over below this
+TUNE.OS_EXCESS        = 0.035 -- oversteer: the rear slipping at this much more of an angle than the front (rad, 2 deg) ...
+TUNE.OS_EXCESS_OFF    = 0.02  -- ... and it's over below this
+TUNE.OS_MIN_YAW       = 0.10  -- rad/s the car must be turning for oversteer (0.08 to hold it)
+TUNE.TURN_MIN_YAW     = 0.05  -- rad/s the car must be turning for understeer and the warnings (0.035 to hold them)
 -- Drift: the rule from Damgam's Drift Scoring app. A drift is the rear tyres' slip angle (AC's own,
 -- the larger of the two) over DRIFT_MIN_ANGLE at more than DRIFT_MIN_SPEED, up to DRIFT_MAX_ANGLE
 -- (past that it's a spin). Going backwards, the angle is measured from the other end (180 - angle).
@@ -138,6 +161,12 @@ local function pedalLevel(v)
   return clamp(pct, 0, 100) / 100
 end
 T.clamp, T.smoothstep = clamp, smoothstep
+-- a tyre's force against its normalised slip (1 at the peak), as a share of the peak
+local function tyreCurve(s)
+  local C = TUNE.TYRE_SHAPE_C
+  local B = math.tan(pi / (2 * C))
+  return math.sin(C * math.atan(B * s))
+end
 
 -- Fixed-size history of samples (reused in place: no garbage per frame)
 local function newRing(n)
@@ -191,7 +220,8 @@ local function resetState()
   est = { rn = 0, rd = 0, ratio = nil, lock = TUNE.LOCK_DEFAULT, balance = 0, frontSteer = nil, rearSteer = 0,
           slipF = nil, slipR = nil, slideRate = 0, prevSlide = nil, state = 0, cand = 0, candT = 0,
           drifting = false, driftAngle = 0, driftOffT = 0,
-          ps = 0, psCtl = 0, psOn = false, psCtlOn = false, rs = 0, drvF = false, drvR = false }
+          ps = 0, psCtl = 0, psOn = false, psCtlOn = false, rs = 0, drvF = false, drvR = false,
+          srPk = { TUNE.SR_PEAK, TUNE.SR_PEAK } }
   mark = { init = false, y = 0, d = 0, df = 0, ds = 0, s = 0 }
   gm = { pF = 0, pR = 0 }
   -- signs AC's values are learnt against (see calibrate()), kept per car
@@ -248,14 +278,19 @@ local function buildDrivetrain(car, wheels, yF, yR, enginePref)
   local sIni = iniData(car.index, "suspensions.ini")
   local cg = iniGet(sIni, "BASIC", "CG_LOCATION")
 
-  -- engine position: transverse at the front for front-wheel drive; otherwise from the weight
-  -- distribution (or the player's choice in the settings)
-  local where = enginePref
+  -- engine position: transverse at the front for front-wheel drive; otherwise from the car's tags,
+  -- maker and model, or description (carinfo.lua), else from the weight distribution (or the
+  -- player's choice in the settings)
+  local where, whereFrom = enginePref, "set in the settings"
   if not where or where == "auto" then
-    if layout == "fwd" then where = "transverse"
-    elseif cg and cg < TUNE.REAR_ENGINE_BELOW then where = "rear"
-    elseif cg and cg < TUNE.MID_ENGINE_BELOW then where = "mid"
-    else where = "front" end
+    if layout == "fwd" then where, whereFrom = "transverse", "front-wheel drive"
+    else
+      local ok, w, from = pcall(function() return CarInfo.engineOf(CarInfo.identity(car.index)) end)
+      if ok and w then where, whereFrom = w, "from its " .. from
+      elseif cg and cg < TUNE.REAR_ENGINE_BELOW then where, whereFrom = "rear", "from its weight distribution"
+      elseif cg and cg < TUNE.MID_ENGINE_BELOW then where, whereFrom = "mid", "from its weight distribution"
+      else where, whereFrom = "front", cg and "from its weight distribution" or "no data: assumed" end
+    end
   end
   local ey, gy
   if where == "transverse" then ey, gy = yF + 0.05, yF - 0.45
@@ -296,7 +331,14 @@ local function buildDrivetrain(car, wheels, yF, yR, enginePref)
   else
     axle(gb, false, main or "open"); driven[2], driven[3] = true, true
   end
-  return { layout = layout, engine = where, cg = cg, nodes = nodes, driven = driven,
+  -- the road wheels' full lock: the steering wheel's lock over the rack's ratio (car.ini)
+  local cIni = iniData(car.index, "car.ini")
+  local ratio = iniGet(cIni, "CONTROLS", "STEER_RATIO")
+  local lockW = iniGet(cIni, "CONTROLS", "STEER_LOCK") or num(get(car, "steerLock"), 0)
+  local roadLock = (ratio and ratio > 1 and lockW and lockW > 1) and math.rad(abs(lockW) / abs(ratio)) or nil
+  if roadLock and (roadLock < 0.05 or roadLock > 1.4) then roadLock = nil end
+  return { layout = layout, engine = where, engineFrom = whereFrom, cg = cg, nodes = nodes, driven = driven, roadLock = roadLock,
+           steerLockIni = iniGet(cIni, "CONTROLS", "STEER_LOCK"),
            sources = { { k = "ice", x = 0, y = ey } } }
 end
 
@@ -343,7 +385,7 @@ local function updateAccel(dt, vel, fwd, left)
   local r = kin.vring
   local s = ringNext(r)
   s.t, s.x, s.y, s.z = clock, vel.x, vel.y, vel.z
-  local t0 = clock - TUNE.GF_WINDOW
+  local t0 = clock - max(TUNE.GF_WINDOW, 2.5 * dt)   -- at least three frames, at a low frame rate
   local n, st, sx, sy, sz = 0, 0, 0, 0, 0
   local idx = r.head
   for _ = 1, r.count do
@@ -439,14 +481,23 @@ end
 -- ===== Balance state (as the BeamNG version, with AC's ndSlip as each axle's proximity) =====
 -- 0 neutral, 1 front near its limit, 2 understeer, 3 rear near its limit, 4 both at their limit,
 -- 5 oversteer (a drift with dc), 6 a controlled powerslide
-local function balanceStateOf(prev, bal, measured, rearSliding)
+local function balanceStateOf(prev, measured, excess)
   if est.drifting then return 5 end
   if not measured then return 0 end
   if est.psOn then return est.psCtlOn and 6 or 5 end
-  if bal >= (prev == 5 and 0.12 or 0.15) then return 5 end
-  if rearSliding then return 0 end
-  if abs(kin.yawRate) < TUNE.US_MIN_YAW * 0.5 then return 0 end
-  if bal <= -(prev == 2 and TUNE.US_WARN_SHARE - 0.05 or TUNE.US_WARN_SHARE) then return 2 end
+  -- a spin: past DRIFT_MAX_ANGLE it's no longer a drift, but it's oversteer
+  if est.driftAngle >= TUNE.DRIFT_MAX_ANGLE and kin.speed * 3.6 > TUNE.DRIFT_MIN_SPEED then return 5 end
+  local yaw = abs(kin.yawRate)
+  local wasOver, wasUnder = prev == 5, prev == 2
+  -- oversteer: the rear past its peak, stepping out
+  if yaw >= (wasOver and TUNE.OS_MIN_YAW * 0.8 or TUNE.OS_MIN_YAW)
+     and gm.pR >= (wasOver and TUNE.PAST_OFF or TUNE.PAST_ON)
+     and excess > (wasOver and TUNE.OS_EXCESS_OFF or TUNE.OS_EXCESS) then return 5 end
+  local turning = prev ~= 0 and prev ~= 6 and TUNE.TURN_MIN_YAW * 0.7 or TUNE.TURN_MIN_YAW
+  if yaw < turning then return 0 end
+  -- understeer: the front past its peak, and further past it than the rear
+  if gm.pF >= (wasUnder and TUNE.PAST_OFF or TUNE.PAST_ON)
+     and gm.pF - gm.pR >= (wasUnder and TUNE.US_LEAD_OFF or TUNE.US_LEAD) then return 2 end
   local lead = gm.pF - gm.pR
   local wasF, wasR = prev == 1 or prev == 2 or prev == 4, prev == 3 or prev == 4 or prev == 5
   local nearF = gm.pF >= (wasF and TUNE.NEAR_OFF or TUNE.NEAR_ON)
@@ -486,6 +537,7 @@ function T.update(car, dt, opts)
     lay = captureLayout(car, opts.engine)
     if not lay then return nil, "waiting for car data" end
     lay.enginePref = opts.engine or "auto"
+    if lay.drive.roadLock then est.lock, est.lockKnown = lay.drive.roadLock, true end
   end
   clock = clock + dt
 
@@ -516,6 +568,7 @@ function T.update(car, dt, opts)
   local handbrake = clamp(num(get(car, "handbrake"), 0), 0, 1)
   local steerDeg = num(car.steer, 0)
   local lockDeg = num(get(car, "steerLock"), 0)
+  if lockDeg < 1 then lockDeg = lay.drive.steerLockIni or 0 end
   cal.lockSeen = max(cal.lockSeen, abs(steerDeg))
   if lockDeg < 1 then lockDeg = max(cal.lockSeen, 90) end
   if cal.lockSeen > lockDeg * 1.02 then lockDeg = cal.lockSeen end
@@ -587,10 +640,22 @@ function T.update(car, dt, opts)
     end
     if not hold then S.severity = S.severity + (severity - S.severity) * gripK end
 
-    -- torque: + drive, - braking, from the slip ratio (what the tyre is actually being asked for)
+    -- torque: + drive, - braking, from the slip ratio (what the tyre is actually being asked for),
+    -- full at the slip ratio where this axle's tyres peak
+    local ax = (i < 2) and 1 or 2
+    if not unloaded and speed > 5 and abs(saDeg) < 1 and nd > 0.25 and nd < 1.2 and abs(sr) > 0.015 then
+      local sample = clamp(abs(sr) / nd, 0.03, 0.4)
+      est.srPk[ax] = est.srPk[ax] + (sample - est.srPk[ax]) * clamp(dt / TUNE.SR_PEAK_TAU, 0, 1)
+    end
     local torque
     if speed < TUNE.STANDSTILL_SPEED then torque = -max(brake, handbrake * ((i >= 2) and 1 or 0))
-    else torque = clamp(sr * ratioScale / TUNE.SR_PEAK, -1, 1) end
+    else
+      -- the share of the tyre's grip in use (its curve at ndSlip), the longitudinal part of it
+      local sx = sr * ratioScale / est.srPk[ax]
+      local n = max(nd, abs(sx), 1e-6)
+      local share = (n >= 1) and 1 or tyreCurve(n)
+      torque = clamp(share * sx / n, -1, 1)
+    end
     local driven = lay.drive.driven[i]
     local driveline = 0
     if driven then
@@ -602,7 +667,10 @@ function T.update(car, dt, opts)
     local lk = w.look
     local rawYaw = atan2(dot(lk, left), dot(lk, fwd))
     if snapNow and not S.centred then S.steerBase, S.centred = rawYaw, true
-    elseif not S.steerBase then S.steerBase = rawYaw
+    elseif not S.steerBase then
+      -- before the wheels have been seen straight: the wheel points along the body (give or take
+      -- its toe), so the reference is the nearest quarter turn (not whatever it's steered to now)
+      S.steerBase = math.floor(rawYaw / (pi / 2) + 0.5) * (pi / 2)
     elseif centreNow then
       local d = wrapAngle(rawYaw - S.steerBase)
       S.steerBase = S.steerBase + d * centreK
@@ -705,7 +773,7 @@ function T.update(car, dt, opts)
     end
   end
 
-  local cand = balanceStateOf(est.state, est.balance, speed > TUNE.TRAVEL_FADE_LO, rs > 0.05)
+  local cand = balanceStateOf(est.state, speed > TUNE.TRAVEL_FADE_LO, diff)
   local warn = cand == 1 or cand == 3 or cand == 4
   if cand ~= est.cand then est.cand, est.candT = cand, 0 else est.candT = est.candT + dt end
   if not warn or est.state == 2 or est.state == 5 or est.candT >= TUNE.WARN_HOLD or (est.state ~= 0 and warn) then est.state = cand end
@@ -799,7 +867,8 @@ end
 function T.diag()
   if not lay then return nil end
   return {
-    layout = lay.drive.layout, engine = lay.drive.engine, cg = lay.drive.cg, wb = lay.wb,
+    layout = lay.drive.layout, engine = lay.drive.engine, engineFrom = lay.drive.engineFrom, cg = lay.drive.cg, wb = lay.wb,
+    srPeakF = est.srPk[1], srPeakR = est.srPk[2], lockKnown = est.lockKnown,
     pF = gm.pF, pR = gm.pR, state = est.state, balance = est.balance, lock = est.lock, ratio = est.ratio,
     slipF = est.slipF, slipR = est.slipR, drifting = est.drifting, driftAngle = est.driftAngle, yaw = kin.yawRate, steerSign = cal.steerSign, srSign = cal.srSign,
     yawSign = kin.yawSign,

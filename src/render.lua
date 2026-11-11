@@ -214,7 +214,7 @@ local function steerScale(x, k) return Tm.toScale(x, k or 20) end
 local TRAVEL_COLOUR = { neutral = { 150, 210, 245 }, near = { 255, 214, 10 }, rnear = { 255, 214, 10 }, limit = { 255, 214, 10 },
                         under = { 255, 96, 24 }, over = { 250, 130, 235 }, drift = { 60, 230, 195 }, pslide = { 60, 230, 195 } }
 local DRIFT_ON, DRIFT_OFF = 0.6, 0.45
-local DRIFT_CONFIRM_MS, STATE_HOLD_MS, STATE_BLEND_MS = 200, 450, 80
+local DRIFT_CONFIRM_MS, STATE_HOLD_MS, STATE_BLEND_MS = 100, 200, 80
 local MARK_FADE_IN_MS, MARK_FADE_OUT_MS = 30, 120
 local STATE_SEVERITY = { near = 1, rnear = 1, limit = 2, under = 3, over = 3, drift = 3, pslide = 3 }
 local BS_STATE = { [1] = 'near', [2] = 'under', [3] = 'rnear', [4] = 'limit', [5] = 'over', [6] = 'pslide' }

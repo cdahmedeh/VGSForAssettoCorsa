@@ -1,6 +1,6 @@
 # VGS Display for Assetto Corsa
 
-**Version 1.10**
+**Version 1.20**
 
 A live grip display for Assetto Corsa, ported from the BeamNG.drive version (2.5) and inspired by the VGS (Vehicle Gravity System) in Enthusia Professional Racing. It shows what a simulator can't let you feel: how hard each tyre is working, when one lets go and how badly, where the car is really going against where you're steering, and whether it's the front or the rear that's giving up.
 
@@ -17,7 +17,9 @@ Every readout in 1.0 was checked against the exact values in a vehicle simulatio
 3. In a session, open the app bar on the right of the screen and switch on **VGS Display**.
 4. Move it and resize it to taste. The circle always fills the window.
 
-The cog on its title bar opens the settings: engine position, whether to draw the drivetrain, and a diagnostics panel.
+The cog on its title bar opens the settings: engine position, whether to draw the drivetrain, how see-through the background is, and a diagnostics panel.
+
+The window has no background of its own (and so no blur behind it): only the circle is drawn, at 62 % opacity as in the BeamNG version. Hover over it to bring up its title bar, to move it or open the settings.
 
 It shows the car the camera is on, so it works in replays and while spectating too.
 
@@ -133,7 +135,7 @@ AC reports some things BeamNG doesn't, and the other way round.
 
 ## Settings you can change
 
-In the app's settings window: engine position, and whether to draw the drivetrain. The diagnostics there show what the app has read and learnt about the car: its layout, where the engine position came from, the full lock, each axle's peak slip ratio, the signs, and the live balance.
+In the app's settings window: engine position, whether to draw the drivetrain, and the background's opacity (0 % is fully see-through, 100 % solid; 62 % by default). The diagnostics there show what the app has read and learnt about the car: its layout, where the engine position came from, the full lock, each axle's peak slip ratio, the signs, and the live balance.
 
 The rest are constants at the top of `src/telemetry.lua` (the `TUNE` table) and `src/render.lua`. Most keep their BeamNG names and meanings. The AC-specific ones:
 

@@ -2,7 +2,7 @@
 -- ---------------------------------------------------------------------------
 -- A live grip display inspired by the VGS in Enthusia Professional Racing, ported from the
 -- BeamNG.drive version. The settings (the cog on the app's title bar) hold the engine position,
--- whether to draw the drivetrain, and a few diagnostics.
+-- whether to draw the drivetrain, the background's opacity, and a few diagnostics.
 -- ---------------------------------------------------------------------------
 
 local T = require('src/telemetry')
@@ -12,6 +12,7 @@ local sim = ac.getSim()
 local config = ac.storage({
   engine = 1,           -- 1 = auto, 2 = front, 3 = mid, 4 = rear, 5 = transverse (front-wheel drive)
   drivetrain = true,    -- draw the drivetrain under the wheels
+  background = 62,      -- how opaque the circle's background is, in percent (as the BeamNG version)
 })
 local ENGINE = { 'auto', 'front', 'mid', 'rear', 'transverse' }
 
@@ -41,7 +42,7 @@ function script.windowMain(dt)
   end
   local size = ui.windowSize()
   local okD, eD = pcall(R.draw, body, size.x, size.y, dt * 1000, {
-    drivetrain = config.drivetrain, message = why,
+    drivetrain = config.drivetrain, background = config.background / 100, message = why,
   })
   if not okD then report('draw', eD); pcall(R.reset) end
 end
@@ -52,6 +53,7 @@ local STATE_NAME = { [0] = 'neutral', 'front near limit', 'understeer', 'rear ne
 function script.windowSettings(dt)
   ui.header('Display')
   if ui.checkbox('Show the drivetrain', config.drivetrain) then config.drivetrain = not config.drivetrain end
+  config.background = math.floor(ui.slider('##background', config.background, 0, 100, 'Background: %.0f%%') + 0.5)
   ui.offsetCursorY(8)
   ui.header('Engine position')
   ui.textWrapped('AC doesn\'t say where a car\'s engine sits. It\'s placed from the car\'s tags, its maker and model, its description, or else its weight distribution. Pick it here if that guesses wrong.')

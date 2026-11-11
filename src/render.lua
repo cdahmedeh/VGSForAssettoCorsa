@@ -722,10 +722,11 @@ local function drawEmpty(W, H, msg)
 end
 
 -- body: telemetry output (or nil); W, H: the window's size; dtMs: time since the last frame;
--- opts: { drivetrain = bool, message = string }
+-- opts: { drivetrain = bool, background = 0..1 (the circle's opacity), message = string }
 function R.draw(body, W, H, dtMs, opts)
   MS.now = MS.now + (dtMs or 16)
   opts = opts or {}
+  STYLE.panelFill.mult = clamp(opts.background or 0.62, 0, 1)
   if not body then
     trail, markState, geoCache.body = {}, nil, nil
     drawEmpty(W, H, opts.message)

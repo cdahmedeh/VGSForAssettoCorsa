@@ -6,11 +6,15 @@ A live grip display for Assetto Corsa, inspired by the VGS (Visual Gravity Syste
 
 > **This is a port.** VGS Display was written for BeamNG.drive, and this app is a port of it to Assetto Corsa as a Custom Shaders Patch (CSP) Lua app. The picture, the colours and the way you read it are the BeamNG version's. Underneath, it reads what AC reports, which is in some ways much more precise than what BeamNG gives, and in others less complete. It also leaves out some of the BeamNG version's features. [A port of the BeamNG version](#a-port-of-the-beamng-version) lists everything that's better, different or missing.
 
+![Eleven racing situations as the app shows them: a race start, braking for turn 1, trail braking, turning in too fast, a corner at the limit, too much power on the exit, lifting mid-corner, kerbs, a wet track, a prototype in a fast corner, and a drift](docs/racing.gif)
+
+*Above: eleven racing situations, from a race start to a drift, as the app shows them.*
+
 Every wheel is drawn where it sits on the car, with its grip in use, its slide, the torque through it and its steering angle. The drivetrain is drawn underneath, your inputs run around the rim, a G-force dot with a fading trail sits in the middle, and a small marker by the steering arc shows how much the car is actually turning, coloured for understeer and oversteer. When the car is off balance, the top of the circle says how, and by how many degrees.
 
-![The display on the power out of a left-hander](docs/overview.png)
+![The display on the power out of a left-hander, with every element labelled](docs/overview.png)
 
-*Above: a front-engined, rear-drive coupé turning left with full throttle in first gear. Both rear tyres are past their peak (filled pink), the drive outlines and the driveshaft are green, the pink-magenta marker has swung out beyond the steering arc (the rear is stepping out: oversteer, 1.4° more slip at the rear than the front), the throttle arc is full and the G-force dot is pushed right and back. Like every picture of the display in this README, it's the app's own output, fed by a vehicle simulation (see [About the images](#about-the-images)).*
+*Above: a front-engined, rear-drive coupé turning left with full throttle in first gear. Both rear tyres have just gone past their peak and the rear is stepping out. The pink-magenta marker has swung out beyond the steering arc, and the readout says oversteer, with 1.4° more slip at the rear than the front. Like every picture of the display in this README, it's the app's own output, fed by a vehicle simulation (see [About the images](#about-the-images)).*
 
 ## Contents
 
@@ -1273,9 +1277,10 @@ The first full release: every measurement checked against a vehicle simulation o
 
 ## About the images
 
-Every picture of the display in this README is the app's own output: the real `src/telemetry.lua` and `src/render.lua`, run under LuaJIT inside the vehicle simulation used for the tests, fed the way AC feeds them, with the simulated car driven through each manoeuvre. Each frame is the circle exactly as the app draws it, at 240 or 260 pixels (the overview at 440, the size comparison at 120 to 320), recorded as a vector drawing and rendered at twice the size. Nothing on them is set by hand; only the captions are added. The simulated cars are generic (a front-engined coupé, a hot hatch, a light mid-engined car, a rear-engined sports car and so on), so the cars don't carry real names.
+Every picture of the display in this README is the app's own output: the real `src/telemetry.lua` and `src/render.lua`, run under LuaJIT inside the vehicle simulation used for the tests, fed the way AC feeds them, with the simulated car driven through each manoeuvre. Each frame is the circle exactly as the app draws it, at 240 or 260 pixels (the overview at 440, the size comparison at 120 to 320, the animation at 344), recorded as a vector drawing and rendered at twice the size (the animation at its own). Nothing on them is set by hand; only the captions and labels are added. The simulated cars are generic (a front-engined coupé, a hot hatch, a light mid-engined car, a rear-engined sports car and so on), so the cars don't carry real names.
 
-- `docs/overview.png`: the overview.
+- `docs/racing.gif`: eleven racing situations, just under a minute at 15 frames a second. Each clip is a stretch of one simulated run, drawn by the app at 344 pixels, with its caption added beside it.
+- `docs/overview.png`: the overview, with its labels and a key to the balance states added around it.
 - `docs/wheels.png`: locked wheels, ABS, wheels going light and off the ground.
 - `docs/grip-curve.png`: a plain diagram of a tyre's grip against `ndSlip`, using the curve the app reads the torque outline through.
 - `docs/balance.png`, `docs/sizes.png`: the balance states, and the readout at three sizes.

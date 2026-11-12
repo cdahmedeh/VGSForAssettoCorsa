@@ -2,7 +2,7 @@
 
 *Version 1.20*
 
-A live grip display for Assetto Corsa, inspired by the VGS (Visual Gravity System) in Enthusia Professional Racing. It shows what a simulator can't let you feel: how hard each tyre is working, when one lets go and how badly, where the car is really going against where you're steering, and whether it's the front or the rear that's giving up.
+A live grip and G-force display for Assetto Corsa, inspired by the VGS (Visual Gravity System) in Enthusia Professional Racing. It shows what a simulator can't let you feel: the G-forces that press you into the seat, how hard each tyre is working, when one lets go and how badly, where the car is really going against where you're steering, and whether it's the front or the rear that's giving up.
 
 > **This is a port.** VGS Display was written for BeamNG.drive, and this app is a port of it to Assetto Corsa as a Custom Shaders Patch (CSP) Lua app. The picture, the colours and the way you read it are the BeamNG version's. Underneath, it reads what AC reports, which is in some ways much more precise than what BeamNG gives, and in others less complete. It also leaves out some of the BeamNG version's features. [A port of the BeamNG version](#a-port-of-the-beamng-version) lists everything that's better, different or missing.
 
@@ -93,15 +93,17 @@ Every wheel is drawn where it sits on the car, with its grip in use, its slide, 
 
 ## What it is, and why
 
-In a real car you feel the limit long before you see it. The steering goes light when the front tyres start to slide, the seat tells you the rear is stepping out, and your body feels the weight pile onto the nose under braking. A force-feedback wheel gives you some of that, but most of it is lost, and with a pad or keyboard almost all of it is.
+In a real car you drive by the seat of your pants. The G-forces push you into the seat, the belts and the bolsters: back under power, forward under braking, sideways in a corner. They tell you how hard the car is working and where its weight is going, all the time and without looking. They also tell you about the limit. When you add steering and the sideways push stops building, the front has given up. When the push suddenly swings round, the rear is stepping out. And the steering goes light as the front tyres start to slide.
+
+In a simulator, without a motion rig, all of that is gone. You sit still while the car on screen brakes at 1 g. A force-feedback wheel brings back some of the steering's feel, but it can't push you into the seat, and with a pad or keyboard even the steering's feel is gone.
 
 Enthusia Professional Racing (2005) answered that with the VGS, a small diagram of the car that showed the weight moving and the tyres working. This app brings the idea to Assetto Corsa, whose tyre model reports, tyre by tyre, exactly where each one is on its grip curve. So there is a great deal to show:
 
+- **The G-forces you'd feel in the seat**: how hard the car is braking, accelerating and cornering, where the weight is moving, and wheels going light or leaving the ground over kerbs.
 - **How hard each tyre is working**, and the moment it goes past its peak.
 - **How badly it's sliding**, from "just over" (pink, ease off now) to locked or spinning (deep red).
 - **Which end of the car is giving up**: a warning before the front runs wide or the rear lets go, then understeer, oversteer, a drift or a powerslide, with how many degrees it's out by.
 - **Where the car is really going** against where you're steering, so you know where to point the wheels to catch a slide.
-- **Where the weight is**: the G-force you'd feel, and wheels going light or leaving the ground over kerbs.
 - **What the car is doing for you**: ABS and traction control, and the drivetrain, live.
 
 AC is built for racing on real tracks, so this README is too. It's a tool for learning to drive at the limit (threshold braking, trail braking, the exit of a corner, catching slides), for understanding a car and its setup, and for seeing why a lap went the way it did. See [Using it to drive better](#using-it-to-drive-better).
@@ -110,6 +112,7 @@ AC is built for racing on real tracks, so this README is too. It's a tool for le
 
 - **Every wheel, to scale.** Grip in use, slides graded from "just over the limit" to "locked", drive and braking torque, live steering angle, blown tyres, wheels light or off the ground. Front, rear and all-wheel drive, front-, mid- and rear-engined.
 - **Grip from AC's own tyre model.** Each tyre's grip bar is AC's normalised slip (`ndSlip`): how far along its own grip curve the tyre is, 1 being the peak. Nothing is estimated or learnt, so it's right from the first corner on every car, tyre and surface AC models.
+- **The G-forces you can't feel.** A G-force dot shows the push you'd feel in the seat, with a trail of where it's been over the last 1.3 s: forward under braking, back under power, across in a corner.
 - **Understeer and oversteer you can see.** A direction marker by the steering arc shows how much the car is really turning. It warns in yellow before the front runs wide or the rear lets go, turns orange-red in real understeer and pink-magenta when the rear steps out, and aquamarine in a drift or an all-wheel-drive powerslide. A band shows the gap to your steering.
 - **The balance in words and degrees.** Whenever the car is off balance, the top of the circle says so: *Front near limit*, *Rear near limit*, *At the limit*, *Understeer* or *Oversteer* with how many degrees it's out by, *Drift* with the drift angle, or *Powerslide*.
 - **Drift detection from Drift Scoring.** A drift is detected with the rule from Damgam's Drift Scoring app, and its angle is the one Drift Scoring's meter shows.
@@ -476,7 +479,7 @@ Everything is drawn to scale, from the car itself:
 
 # Using it to drive better
 
-Every driving skill that matters at the limit comes down to one question: **how much of each tyre's grip am I using, and for what?** In a real car you answer it through the seat and the steering. Here you can see it. This part goes through the classic skills one by one, with what each looks like on the display, what to do, and what going wrong looks like.
+Every driving skill that matters at the limit comes down to one question: **how much of each tyre's grip am I using, and for what?** In a real car you answer it through the G-forces in the seat and the feel of the steering. Here you can see it. This part goes through the classic skills one by one, with what each looks like on the display, what to do, and what going wrong looks like.
 
 The pictures are the app's own output, fed by a vehicle simulation driven through each manoeuvre (see [About the images](#about-the-images)). Each strip reads left to right through one manoeuvre, or side by side as alternatives. The yellow trail behind the G-force dot shows where it's been over the last moment.
 
